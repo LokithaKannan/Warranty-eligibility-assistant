@@ -1,0 +1,116 @@
+// This is your Prisma schema file
+// Documentation: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         String   @default("CUSTOMER") // ADMIN | REVIEWER | CUSTOMER
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  policies     Policy[]
+  claimChecks  ClaimCheck[]
+  claimReviews ClaimReview[]
+  auditLogs    AuditLog[]
+}
+
+model Policy {
+  id               String   @id @default(uuid())
+  name             String
+  productCategory  String
+  manufacturerLabel String
+  durationMonths   Int?
+  proofRequired    Boolean  @default(true)
+  originalFilename String
+  storedFilename   String
+  fileHash         String
+  extractionStatus String   @default("PENDING") // PENDING | EXTRACTED | FAILED | NEEDS_OCR
+  extractedText    String?
+  isConfirmed      Boolean  @default(false)
+  isActive         Boolean  @default(true)
+  reviewerNotes    String?
+  createdById      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy    User           @relation(fields: [createdById], references: [id])
+  clauses      PolicyClause[]
+  claimChecks  ClaimCheck[]
+}
+
+model PolicyClause {
+  id                  String   @id @default(uuid())
+  policyId            String
+  clauseType          String   // WARRANTY_DURATION | EXCLUSION | PROOF_REQUIREMENT | CLAIM_PROCEDURE | GENERAL_TERMS | OTHER
+  clauseText          String
+  pageNumber          Int?
+  confirmedByReviewer Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  policy Policy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+}
+
+model ClaimCheck {
+  id                     String   @id @default(uuid())
+  referenceCode          String   @unique
+  userId                 String
+  policyId               String
+  productName            String
+  productCategory        String
+  purchaseDate           DateTime
+  issueDate              DateTime
+  issueType              String
+  issueDescription       String
+  proofAvailable         Boolean
+  calculatedWarrantyEndDate DateTime?
+  preliminaryResult      String   // MEETS_BASIC_CHECKS | OUTSIDE_PERIOD | POSSIBLE_EXCLUSION | MISSING_INFO | MANUAL_REVIEW
+  explanation            String
+  ruleResults            String   // JSON string of rule results
+  reviewStatus           String   @default("PENDING") // PENDING | REVIEWED | NEEDS_MORE_INFO
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id])
+  policy  Policy        @relation(fields: [policyId], references: [id])
+  reviews ClaimReview[]
+}
+
+model ClaimReview {
+  id           String   @id @default(uuid())
+  claimId      String
+  reviewerId   String
+  reviewAction String   // REVIEWED | REQUESTED_MORE_INFO | ESCALATED
+  reviewerNotes String?
+  reviewOutcome String? // APPROVED_FOR_SUBMISSION | REJECTED | PENDING_MORE_INFO
+  createdAt    DateTime @default(now())
+
+  claim    ClaimCheck @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  reviewer User       @relation(fields: [reviewerId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  outcome    String   @default("SUCCESS")
+  requestId  String?
+  metadata   String?  // JSON string for extra context
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
